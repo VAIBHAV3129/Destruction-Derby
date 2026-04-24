@@ -96,6 +96,26 @@ export class VoxelVehicle {
     /** Set to true externally to enable frustum culling on debris mesh */
     this.frustumCullDebris = false;
 
+    /**
+     * Impulse threshold (N·s) below which no voxels are shed.
+     * Raised by the Armor Density upgrade via GarageManager.
+     */
+    this.impactThreshold = IMPACT_THRESHOLD;
+
+    /**
+     * Multiplier applied to the outward debris launch impulse.
+     * Raised by the Explosive Force upgrade via GarageManager.
+     */
+    this.debrisImpulseMultiplier = 1.0;
+
+    /**
+     * Optional callback fired whenever a voxel is shed.
+     * Signature: (positionGetter: ()=>{x,y,z}|null) => void
+     * Assigned externally (e.g. by FXManager) to attach trails.
+     * @type {((getPos:()=>{x:number,y:number,z:number}|null)=>void)|null}
+     */
+    this.onVoxelDetached = null;
+
     // Build initial voxel grid
     this._buildGrid();
   }
@@ -174,7 +194,7 @@ export class VoxelVehicle {
    * @returns {number} count of voxels detached
    */
   processImpact(hitWorldPos, vehiclePos, vehicleQuat, impulse) {
-    if (impulse < IMPACT_THRESHOLD) return 0;
+    if (impulse < this.impactThreshold) return 0;
 
     // Convert hit point to vehicle local space
     const hitLocal = hitWorldPos.clone()
@@ -281,13 +301,28 @@ export class VoxelVehicle {
     );
 
     // Give debris an impulse in the impact direction
-    const impulseMag = Math.min(impulse * 0.004, 2.5);
+    const impulseMag = Math.min(impulse * 0.004 * this.debrisImpulseMultiplier, 3.5);
     body.applyImpulse(
       { x: (Math.random() - 0.5) * impulseMag, y: impulseMag * 0.6, z: (Math.random() - 0.5) * impulseMag },
       true
     );
 
     this.debrisItems.push({ body, age: 0, idx: dIdx });
+
+    // Notify external listeners (e.g. FXManager trail emitter).
+    // We close over `body` and check validity before each access.
+    if (this.onVoxelDetached) {
+      const capturedBody = body;
+      this.onVoxelDetached(() => {
+        try {
+          const tr = capturedBody.translation();
+          return { x: tr.x, y: tr.y, z: tr.z };
+        } catch {
+          return null;
+        }
+      });
+    }
+
     return true;
   }
 
@@ -334,6 +369,59 @@ export class VoxelVehicle {
 
   /** @returns {number} count of live car voxels */
   getLiveVoxelCount() { return this.voxelCount; }
+
+  /**
+   * Update the voxel colour to show Armor Density upgrade visually.
+   * Outer-shell voxels (top layer + side extremes) gain a metallic silver
+   * tint that increases with upgrade level (1–5).
+   * Level 0 restores the original neon-blue gradient.
+   * @param {number} level 0–5
+   */
+  applyArmorVisual(level) {
+    const silverColor = new THREE.Color(0x99aacc);
+    const blueColor   = new THREE.Color();
+
+    // Find Y-axis bounds to determine "outer" shell
+    let minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < this.mesh.count; i++) {
+      if (!this.alive[i]) continue;
+      const lx = this.localPos[i * 3],
+            ly = this.localPos[i * 3 + 1],
+            lz = this.localPos[i * 3 + 2];
+      if (lx < minX) minX = lx; if (lx > maxX) maxX = lx;
+      if (ly < minY) minY = ly; if (ly > maxY) maxY = ly;
+      if (lz < minZ) minZ = lz; if (lz > maxZ) maxZ = lz;
+    }
+
+    const EPS = VOXEL_SIZE * 0.6;
+    const t   = Math.min(level / 5, 1);
+
+    for (let i = 0; i < this.mesh.count; i++) {
+      if (!this.alive[i]) continue;
+      const lx = this.localPos[i * 3],
+            ly = this.localPos[i * 3 + 1],
+            lz = this.localPos[i * 3 + 2];
+
+      // Outer shell: top + all four lateral faces
+      const isShell = ly >= maxY - EPS
+        || lx <= minX + EPS || lx >= maxX - EPS
+        || lz <= minZ + EPS || lz >= maxZ - EPS;
+
+      if (isShell && level > 0) {
+        const relY = maxY > minY ? (ly - minY) / (maxY - minY) : 0.5;
+        blueColor.setHSL(0.54 + relY * 0.06, 1.0, 0.55);
+        _color.lerpColors(blueColor, silverColor, t);
+      } else {
+        // Restore neon-blue row gradient
+        const relY = maxY > minY ? (ly - minY) / (maxY - minY) : 0.5;
+        _color.setHSL(0.54 + relY * 0.06, 1.0, 0.55);
+      }
+      this.mesh.setColorAt(i, _color);
+    }
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
 
   /**
    * Full disposal: remove all physics bodies, geometries, materials, textures.

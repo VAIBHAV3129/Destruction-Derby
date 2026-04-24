@@ -1,0 +1,390 @@
+/* ── Garage UI — Neon Cyberpunk Terminal Aesthetic ─────────────────────────── */
+
+:root {
+  --neon:        #00f0ff;
+  --neon-dim:    #007a84;
+  --neon-glow:   rgba(0, 240, 255, 0.32);
+  --neon-bg:     #000810;
+  --panel-bg:    rgba(0, 8, 20, 0.97);
+  --gold:        #ffcc00;
+  --gold-glow:   rgba(255, 204, 0, 0.35);
+  --silver:      #99aacc;
+  --disabled:    #334455;
+  --warn-orange: #ff8800;
+}
+
+/* ══════════════════ OVERLAY BACKDROP ══════════════════════════════════════════ */
+
+#garage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#garage-overlay.hidden { display: none; }
+
+/* Animated scanline overlay */
+#garage-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 240, 255, 0.016) 2px,
+    rgba(0, 240, 255, 0.016) 4px
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 1;
+  animation: scanlines 10s linear infinite;
+}
+@keyframes scanlines {
+  from { background-position: 0 0; }
+  to   { background-position: 0 200px; }
+}
+
+/* ══════════════════ MAIN PANEL ════════════════════════════════════════════════ */
+
+.garage-panel {
+  position: relative;
+  z-index: 2;
+  width: min(700px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--neon);
+  box-shadow:
+    0 0 30px var(--neon-glow),
+    0 0  8px var(--neon-glow),
+    inset 0 0 40px rgba(0, 4, 14, 0.95);
+  padding: 22px 22px 30px;
+  font-family: 'Courier New', monospace;
+  color: var(--neon);
+  animation: panelIn 0.18s ease-out;
+  scroll-behavior: smooth;
+}
+@keyframes panelIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+.garage-panel::-webkit-scrollbar       { width: 4px; }
+.garage-panel::-webkit-scrollbar-track { background: var(--neon-bg); }
+.garage-panel::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 2px; }
+
+/* ══════════════════ INCOGNITO WARNING ════════════════════════════════════════ */
+
+.incognito-banner {
+  display: none;
+  background: rgba(255, 136, 0, 0.07);
+  border: 1px solid var(--warn-orange);
+  color: var(--warn-orange);
+  font-size: 10px;
+  padding: 7px 12px;
+  margin-bottom: 14px;
+  letter-spacing: 0.5px;
+  line-height: 1.5;
+}
+.incognito-banner.visible { display: block; }
+
+/* ══════════════════ HEADER ════════════════════════════════════════════════════ */
+
+.garage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--neon-dim);
+  flex-wrap: wrap;
+}
+.garage-title {
+  font-size: 20px;
+  letter-spacing: 4px;
+  text-shadow: 0 0 14px var(--neon);
+  white-space: nowrap;
+}
+.garage-scrap {
+  font-size: 13px;
+  color: var(--gold);
+  text-shadow: 0 0 8px var(--gold-glow);
+  white-space: nowrap;
+}
+.garage-close-btn {
+  background: none;
+  border: 1px solid var(--neon-dim);
+  color: var(--neon);
+  font-size: 16px;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1;
+}
+.garage-close-btn:hover,
+.garage-close-btn:focus { border-color: var(--neon); box-shadow: 0 0 10px var(--neon-glow); }
+
+/* ══════════════════ SECTION TITLES ════════════════════════════════════════════ */
+
+.garage-section-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--neon-dim);
+  margin: 20px 0 10px;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(0, 120, 140, 0.25);
+}
+
+/* ══════════════════ CAR GRID ══════════════════════════════════════════════════ */
+
+.car-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.car-card {
+  border: 1px solid var(--neon-dim);
+  padding: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  min-height: 100px;
+}
+.car-card.selected {
+  border-color: var(--neon);
+  box-shadow: 0 0 14px var(--neon-glow);
+  background: rgba(0, 240, 255, 0.05);
+}
+.car-card.locked { opacity: 0.55; }
+.car-card:not(.locked):hover { border-color: var(--neon); background: rgba(0, 240, 255, 0.04); }
+.car-name { font-size: 13px; letter-spacing: 1.5px; margin-bottom: 5px; text-shadow: 0 0 6px var(--neon); }
+.car-desc { font-size: 10px; opacity: 0.62; line-height: 1.45; margin-bottom: 8px; }
+.car-badge { position: absolute; top: 8px; right: 10px; font-size: 15px; }
+
+/* ══════════════════ UPGRADE LIST ══════════════════════════════════════════════ */
+
+.upgrade-list { display: flex; flex-direction: column; gap: 10px; }
+.upgrade-card {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(0, 120, 140, 0.38);
+  padding: 12px 14px;
+  transition: border-color 0.2s;
+}
+.upgrade-card:hover { border-color: var(--neon-dim); }
+.upgrade-icon { font-size: 20px; text-align: center; }
+.upgrade-info { min-width: 0; }
+.upgrade-name { font-size: 12px; letter-spacing: 1px; margin-bottom: 3px; text-shadow: 0 0 5px var(--neon); }
+.upgrade-desc { font-size: 10px; opacity: 0.58; line-height: 1.35; margin-bottom: 6px; }
+
+.upgrade-pips { display: flex; gap: 5px; margin-bottom: 4px; }
+.pip {
+  width: 10px; height: 10px;
+  border: 1px solid var(--neon-dim);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.pip.filled {
+  background: var(--neon);
+  border-color: var(--neon);
+  box-shadow: 0 0 6px var(--neon-glow);
+}
+.upgrade-cost { font-size: 10px; color: var(--gold); opacity: 0.88; }
+
+/* ══════════════════ NEON BUTTONS ══════════════════════════════════════════════ */
+
+.neon-btn {
+  background: transparent;
+  border: 1px solid var(--neon);
+  color: var(--neon);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px var(--neon);
+  transition: background 0.15s, box-shadow 0.15s;
+  min-height: 44px;
+  min-width: 76px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.neon-btn:hover:not(:disabled),
+.neon-btn:focus:not(:disabled) { background: rgba(0,240,255,0.10); box-shadow: 0 0 14px var(--neon-glow); outline: none; }
+.neon-btn:active:not(:disabled) { background: rgba(0,240,255,0.20); transform: scale(0.97); }
+.neon-btn:disabled { border-color: var(--disabled); color: var(--disabled); cursor: not-allowed; text-shadow: none; opacity: 0.5; }
+.neon-btn.gold-btn { border-color: var(--gold); color: var(--gold); text-shadow: 0 0 8px var(--gold-glow); }
+.neon-btn.gold-btn:hover:not(:disabled) { background: rgba(255,204,0,0.10); box-shadow: 0 0 14px var(--gold-glow); }
+.neon-btn.silver-btn { border-color: var(--silver); color: var(--silver); }
+
+/* ══════════════════ SCRAP DOUBLER ═════════════════════════════════════════════ */
+
+.scrap-doubler {
+  margin-top: 22px;
+  padding: 14px;
+  border: 1px dashed var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: rgba(255, 204, 0, 0.03);
+  flex-wrap: wrap;
+}
+.scrap-doubler-text { font-size: 11px; color: var(--gold); text-shadow: 0 0 8px var(--gold-glow); line-height: 1.5; flex: 1; min-width: 160px; }
+
+/* ══════════════════ FOOTER ════════════════════════════════════════════════════ */
+
+.garage-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 120, 140, 0.25);
+  flex-wrap: wrap;
+}
+
+/* ══════════════════ PURCHASE FLASH ════════════════════════════════════════════ */
+
+@keyframes purchaseFlash {
+  0%   { box-shadow: 0 0  0px rgba(0,240,255,0);   }
+  30%  { box-shadow: 0 0 28px rgba(0,240,255,0.7); }
+  100% { box-shadow: 0 0  0px rgba(0,240,255,0);   }
+}
+.purchase-flash { animation: purchaseFlash 0.5s ease-out; }
+
+/* ══════════════════ HUD ELEMENTS ══════════════════════════════════════════════ */
+
+#garage-open-btn {
+  position: fixed;
+  top: 12px; right: 16px;
+  z-index: 20;
+  background: rgba(0, 8, 20, 0.82);
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  color: var(--neon);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-shadow: 0 0 6px var(--neon);
+  padding: 0 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+#garage-open-btn:hover { border-color: var(--neon); box-shadow: 0 0 10px var(--neon-glow); }
+
+#incognito-warning {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 25;
+  background: rgba(255, 136, 0, 0.10);
+  border-bottom: 1px solid rgba(255, 136, 0, 0.35);
+  color: var(--warn-orange);
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 5px 14px;
+  text-align: center;
+  display: none;
+}
+#incognito-warning.visible { display: block; }
+
+/* ══════════════════ MOBILE CONTROLS ═══════════════════════════════════════════ */
+
+#mobile-controls {
+  position: fixed;
+  bottom: 0; left: 0;
+  width: 100%;
+  padding: 10px 14px 14px;
+  display: none;
+  justify-content: space-between;
+  align-items: flex-end;
+  z-index: 20;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+#mobile-controls.visible { display: flex; }
+.mc-cluster { display: flex; gap: 8px; pointer-events: all; }
+.mc-btn {
+  width: 58px; height: 58px;
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  border-radius: 8px;
+  background: rgba(0, 8, 20, 0.78);
+  color: var(--neon);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+  backdrop-filter: blur(5px);
+  transition: background 0.1s, border-color 0.1s;
+  cursor: pointer;
+}
+.mc-btn.pressed,
+.mc-btn:active { background: rgba(0,240,255,0.20); border-color: var(--neon); }
+.mc-btn.drive-btn { width: 72px; height: 72px; font-size: 28px; border-color: rgba(0,240,255,0.75); box-shadow: 0 0 14px rgba(0,240,255,0.28); }
+
+/* ══════════════════ PAUSE OVERLAY ═════════════════════════════════════════════ */
+
+#pause-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0, 0, 0, 0.82);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', monospace;
+}
+#pause-overlay.visible { display: flex; }
+.pause-panel {
+  border: 1px solid rgba(0,240,255,0.55);
+  padding: 32px 44px;
+  background: rgba(0, 8, 20, 0.96);
+  text-align: center;
+  color: var(--neon);
+  box-shadow: 0 0 24px rgba(0,240,255,0.22);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: panelIn 0.15s ease-out;
+}
+.pause-title { font-size: 26px; letter-spacing: 6px; text-shadow: 0 0 16px var(--neon); margin-bottom: 4px; }
+
+/* ══════════════════ RESPONSIVE ════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  .garage-panel  { padding: 14px 12px 22px; }
+  .garage-title  { font-size: 16px; letter-spacing: 2px; }
+  .car-grid      { grid-template-columns: 1fr; }
+  .scrap-doubler { flex-direction: column; align-items: flex-start; }
+  .upgrade-card  { grid-template-columns: 28px 1fr auto; gap: 8px; }
+  .pause-panel   { padding: 22px 24px; }
+}
