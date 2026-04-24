@@ -1,0 +1,19 @@
+{
+  "name": "neon-debris-voxel-derby",
+  "version": "1.0.0",
+  "description": "3D Voxel Destruction Derby game using Three.js and Rapier.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.12.0",
+    "three": "^0.162.0",
+    "postprocessing": "^6.35.0"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}

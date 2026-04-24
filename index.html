@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Debris: Voxel Derby</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+      #canvas-container { width: 100vw; height: 100vh; }
+      canvas { display: block; }
+
+      /* HUD overlay */
+      #hud {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 10;
+      }
+      #hud-top {
+        position: absolute;
+        top: 16px; left: 50%;
+        transform: translateX(-50%);
+        color: #00f0ff;
+        text-shadow: 0 0 8px #00f0ff;
+        font-size: 14px;
+        display: flex;
+        gap: 32px;
+      }
+      #hud-bottom-left {
+        position: absolute;
+        bottom: 20px; left: 20px;
+        color: #00f0ff;
+        text-shadow: 0 0 6px #00f0ff;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      #loading-screen {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #00f0ff;
+        text-shadow: 0 0 12px #00f0ff;
+        z-index: 100;
+        font-size: 18px;
+        gap: 16px;
+      }
+      #loading-bar-wrap {
+        width: 240px;
+        height: 4px;
+        background: #001f2a;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      #loading-bar {
+        height: 100%;
+        background: #00f0ff;
+        box-shadow: 0 0 8px #00f0ff;
+        width: 0%;
+        transition: width 0.3s;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-screen">
+      <div>NEON DEBRIS</div>
+      <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+      <div id="loading-text" style="font-size:12px;opacity:0.7">Initializing physics…</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="hud">
+      <div id="hud-top">
+        <span>LEVEL: <span id="hud-level">1</span></span>
+        <span>SCRAP: <span id="hud-scrap">0</span></span>
+        <span>VOXELS: <span id="hud-voxels">0</span></span>
+      </div>
+      <div id="hud-bottom-left">
+        <div>WASD / Arrow Keys — Drive</div>
+        <div>Space — Brake</div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
