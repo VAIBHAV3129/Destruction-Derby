@@ -42,6 +42,47 @@ const ChromaShader = {
   `,
 };
 
+// ── Radial blur shader (nitro / overdrive effect) ─────────────────────────────
+const RadialBlurShader = {
+  uniforms: {
+    tDiffuse:  { value: null },
+    /** 0 = off, >0 = zoom-blur amount */
+    uStrength: { value: 0.0 },
+    /** Normalized screen-space blur origin */
+    uCenter:   { value: new THREE.Vector2(0.5, 0.5) },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uStrength;
+    uniform vec2  uCenter;
+    varying vec2 vUv;
+    const int SAMPLES = 12;
+    void main() {
+      if (uStrength < 0.001) {
+        gl_FragColor = texture2D(tDiffuse, vUv);
+        return;
+      }
+      vec2 dir   = vUv - uCenter;
+      vec4 col   = vec4(0.0);
+      float total = 0.0;
+      for (int i = 0; i < SAMPLES; i++) {
+        float t = float(i) / float(SAMPLES - 1);
+        float w = 1.0 - t * 0.65;
+        col   += texture2D(tDiffuse, vUv - dir * uStrength * t) * w;
+        total += w;
+      }
+      gl_FragColor = col / total;
+    }
+  `,
+};
+
 // ── Minimal screen-flash / vignette shader ────────────────────────────────────
 const FlashShader = {
   uniforms: {
@@ -78,6 +119,9 @@ export class PostFX {
     this.renderer = renderer;
     this._chromaDecay = 0;
     this._flashDecay  = 0;
+    this._radialStrength = 0;
+    this._radialDuration = 0;
+    this._radialAge      = 0;
 
     const size = new THREE.Vector2();
     renderer.getSize(size);
@@ -106,7 +150,12 @@ export class PostFX {
     this.flashPass.uniforms.uFlash.value = 0;
     this.composer.addPass(this.flashPass);
 
-    // 5) Tone-mapping / output
+    // 5) Radial blur (nitro/overdrive — inactive by default)
+    this.radialBlurPass = new ShaderPass(RadialBlurShader);
+    this.radialBlurPass.uniforms.uStrength.value = 0;
+    this.composer.addPass(this.radialBlurPass);
+
+    // 6) Tone-mapping / output
     this.composer.addPass(new OutputPass());
   }
 
@@ -122,6 +171,26 @@ export class PostFX {
 
     if (color) this.flashPass.uniforms.uFlashColor.value.copy(color);
     else this.flashPass.uniforms.uFlashColor.value.set(1, 0.5, 0.1);
+  }
+
+  /**
+   * Extra chromatic-aberration spike for very heavy hits (> 60 N·s).
+   * @param {number} strength  0–1
+   */
+  triggerChromaticSpike(strength) {
+    this._chromaDecay = Math.max(this._chromaDecay, strength * 1.8);
+    this.chromaPass.uniforms.uStrength.value = this._chromaDecay;
+  }
+
+  /**
+   * Trigger a radial-zoom blur for nitro / overdrive activation.
+   * @param {number} strength   0–1 blur intensity
+   * @param {number} [duration] seconds over which the blur fades out
+   */
+  triggerRadialBlur(strength, duration = 0.35) {
+    this._radialStrength = Math.min(Math.max(strength, 0), 1);
+    this._radialDuration = Math.max(duration, 0.05);
+    this._radialAge      = 0;
   }
 
   /**
@@ -144,6 +213,16 @@ export class PostFX {
     // Flash decay
     this._flashDecay = Math.max(0, this._flashDecay - dt * 6);
     this.flashPass.uniforms.uFlash.value = this._flashDecay;
+
+    // Radial blur decay (quadratic ease-out over _radialDuration)
+    if (this._radialAge < this._radialDuration) {
+      this._radialAge = Math.min(this._radialAge + dt, this._radialDuration);
+      const t = this._radialAge / this._radialDuration;
+      this.radialBlurPass.uniforms.uStrength.value =
+        this._radialStrength * (1 - t * t) * 0.22;
+    } else if (this.radialBlurPass.uniforms.uStrength.value > 0) {
+      this.radialBlurPass.uniforms.uStrength.value = 0;
+    }
   }
 
   /** Render one frame through the full post-processing stack. */

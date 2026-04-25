@@ -83,6 +83,25 @@ const MIGRATIONS = {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/**
+ * Best-effort private-browsing detection.
+ * Returns true when localStorage is unavailable (Safari private mode) or
+ * when the storage quota is zero. Returns false otherwise (Chrome / Firefox
+ * incognito still allow localStorage; they just do not persist it).
+ * @returns {boolean}
+ */
+export function isSaveIncognito() {
+  try {
+    const testKey = '__nd_priv__';
+    localStorage.setItem(testKey, '1');
+    localStorage.removeItem(testKey);
+    return false;
+  } catch {
+    // Safari private mode throws a SecurityError / QuotaExceededError here
+    return true;
+  }
+}
+
 export class SaveSchema {
   /**
    * Load the save from localStorage, run any needed migrations, and return it.

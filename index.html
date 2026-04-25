@@ -36,6 +36,23 @@
         font-size: 13px;
         line-height: 1.6;
       }
+      /* Objective progress bar */
+      #hud-progress-wrap {
+        position: absolute;
+        top: 48px; left: 50%;
+        transform: translateX(-50%);
+        width: 200px; height: 3px;
+        background: rgba(0, 240, 255, 0.15);
+        border-radius: 2px;
+      }
+      #hud-progress-bar {
+        height: 100%;
+        width: 0%;
+        background: #00f0ff;
+        box-shadow: 0 0 6px #00f0ff;
+        border-radius: 2px;
+        transition: width 0.3s;
+      }
       #loading-screen {
         position: fixed;
         top: 0; left: 0;
@@ -68,6 +85,9 @@
     </style>
   </head>
   <body>
+    <!-- Incognito / private-mode warning banner -->
+    <div id="incognito-warning">⚠ PRIVATE MODE DETECTED — Progress is not saved permanently this session.</div>
+
     <div id="loading-screen">
       <div>NEON DEBRIS</div>
       <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
@@ -76,15 +96,43 @@
 
     <div id="canvas-container"></div>
 
+    <!-- Garage open button (top-right, pointer-events on) -->
+    <button id="garage-open-btn">⚙ GARAGE <span style="font-size:9px;opacity:0.55">[G]</span></button>
+
     <div id="hud">
       <div id="hud-top">
         <span>LEVEL: <span id="hud-level">1</span></span>
+        <span>DEST: <span id="hud-dest">0%</span></span>
         <span>SCRAP: <span id="hud-scrap">0</span></span>
         <span>VOXELS: <span id="hud-voxels">0</span></span>
       </div>
+      <!-- Objective progress bar -->
+      <div id="hud-progress-wrap"><div id="hud-progress-bar"></div></div>
       <div id="hud-bottom-left">
         <div>WASD / Arrow Keys — Drive</div>
         <div>Space — Brake</div>
+        <div>G — Garage &nbsp;|&nbsp; P / Esc — Pause</div>
+      </div>
+    </div>
+
+    <!-- Mobile touch controls -->
+    <div id="mobile-controls">
+      <div class="mc-cluster">
+        <div class="mc-btn" id="mc-left">◀</div>
+        <div class="mc-btn" id="mc-brake">■</div>
+        <div class="mc-btn" id="mc-right">▶</div>
+      </div>
+      <div class="mc-cluster">
+        <div class="mc-btn drive-btn" id="mc-drive">▲</div>
+      </div>
+    </div>
+
+    <!-- Pause overlay -->
+    <div id="pause-overlay">
+      <div class="pause-panel">
+        <div class="pause-title">PAUSED</div>
+        <button class="neon-btn" id="pause-resume-btn" style="width:160px">▶ RESUME</button>
+        <button class="neon-btn gold-btn" id="pause-garage-btn" style="width:160px">⚙ GARAGE</button>
       </div>
     </div>
 

@@ -3,35 +3,48 @@
  * Entry point for Neon Debris: Voxel Derby
  *
  * Bootstrap order:
- *  1. Loading screen
- *  2. Three.js renderer / camera / scene (black + neon grid floor)
- *  3. PhysicsManager (async Rapier init)
- *  4. PostFX composer
- *  5. Vehicle + VoxelVehicle
- *  6. LevelManager + LevelLoader
- *  7. AudioManager (on first user gesture)
- *  8. RAF main loop with fixed-step physics + frame-budget guard
+ *  1. Sitelock check
+ *  2. Loading screen
+ *  3. Three.js renderer / camera / scene (black + neon grid floor)
+ *  4. PhysicsManager (async Rapier init)
+ *  5. PostFX composer
+ *  6. GarageManager + Vehicle + VoxelVehicle (apply saved upgrades)
+ *  7. FXManager — sparks, voxel trails, ghost trail
+ *  8. LevelManager + LevelLoader
+ *  9. CrazyGamesSDK + AudioManager + GarageUI
+ * 10. RAF main loop with fixed-step physics + frame-budget guard
  */
 
 import * as THREE from 'three';
-import { PhysicsManager }    from './physics/PhysicsManager.js';
-import { Vehicle }           from './vehicles/Vehicle.js';
-import { VoxelVehicle }      from './vehicles/VoxelVehicle.js';
-import { PostFX }            from './effects/PostFX.js';
-import { AudioManager }      from './audio/AudioManager.js';
-import { LevelManager, VehicleGarage, VEHICLE_TIERS } from './game/ProgressionSystem.js';
-import { LevelLoader }       from './game/LevelLoader.js';
+import { PhysicsManager }             from './physics/PhysicsManager.js';
+import { Vehicle }                    from './vehicles/Vehicle.js';
+import { VoxelVehicle }               from './vehicles/VoxelVehicle.js';
+import { PostFX }                     from './effects/PostFX.js';
+import { FXManager }                  from './effects/FXManager.js';
+import { AudioManager }               from './audio/AudioManager.js';
+import { LevelManager, VEHICLE_TIERS } from './game/ProgressionSystem.js';
+import { LevelLoader }                from './game/LevelLoader.js';
+import { GarageManager }              from './game/GarageManager.js';
+import { GarageUI }                   from './ui/GarageUI.js';
+import { runSitelock, CrazyGamesSDK } from './game/CrazyGamesSDK.js';
+import { isSaveIncognito }            from './persistence/saveSchema.js';
+import './ui/garage.css';
+
+// ── Sitelock: block unauthorised domains immediately ──────────────────────────
+runSitelock();
 
 // ── Frame budget guard ────────────────────────────────────────────────────────
 const FRAME_BUDGET_MS = 12;
 
 // ── HUD references ─────────────────────────────────────────────────────────────
-const hudLevel  = document.getElementById('hud-level');
-const hudScrap  = document.getElementById('hud-scrap');
-const hudVoxels = document.getElementById('hud-voxels');
-const loadingEl = document.getElementById('loading-screen');
-const loadingBar= document.getElementById('loading-bar');
-const loadingTxt= document.getElementById('loading-text');
+const hudLevel    = document.getElementById('hud-level');
+const hudScrap    = document.getElementById('hud-scrap');
+const hudVoxels   = document.getElementById('hud-voxels');
+const hudDest     = document.getElementById('hud-dest');
+const hudProgress = document.getElementById('hud-progress-bar');
+const loadingEl   = document.getElementById('loading-screen');
+const loadingBar  = document.getElementById('loading-bar');
+const loadingTxt  = document.getElementById('loading-text');
 
 function setLoadingProgress(pct, msg) {
   if (loadingBar) loadingBar.style.width = pct + '%';
@@ -45,6 +58,49 @@ let _shakeDecay     = 0;
 // ── Hit-stop state ────────────────────────────────────────────────────────────
 let _hitStopFrames = 0;
 
+// ── Pause / gameplay session state ────────────────────────────────────────────
+let _paused          = false;
+let _gameplayStarted = false;
+
+// ── Shared impact context (set before processImpact, read in onVoxelDetached) ─
+let _currentImpulse = 0;
+
+// ── Pause overlay helper ──────────────────────────────────────────────────────
+function _updatePauseOverlay() {
+  const el = document.getElementById('pause-overlay');
+  if (el) el.classList.toggle('visible', _paused);
+}
+
+// ── Mobile controls setup ─────────────────────────────────────────────────────
+function _setupMobileControls(keys) {
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const mcEl = document.getElementById('mobile-controls');
+  if (isTouchDevice && mcEl) mcEl.classList.add('visible');
+
+  const bindBtn = (id, code) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => {
+      e.preventDefault();
+      keys[code] = true;
+      el.classList.add('pressed');
+    }, { passive: false });
+    const release = e => {
+      if (e) e.preventDefault();
+      keys[code] = false;
+      el.classList.remove('pressed');
+    };
+    el.addEventListener('touchend',   release, { passive: false });
+    el.addEventListener('touchcancel', release);
+  };
+
+  bindBtn('mc-drive', 'KeyW');
+  bindBtn('mc-brake', 'Space');
+  bindBtn('mc-left',  'ArrowLeft');
+  bindBtn('mc-right', 'ArrowRight');
+}
+
+// ── Main bootstrap ────────────────────────────────────────────────────────────
 async function main() {
   setLoadingProgress(5, 'Initializing renderer…');
 
@@ -95,9 +151,6 @@ async function main() {
   // ── Neon grid floor ───────────────────────────────────────────────────────
   _buildGridFloor(scene);
 
-  // ── Static arena floor (physics) collider placeholder ─────────────────────
-  // (added after physics init below)
-
   setLoadingProgress(35, 'Initializing physics…');
 
   // ── Physics ───────────────────────────────────────────────────────────────
@@ -111,11 +164,11 @@ async function main() {
   setLoadingProgress(55, 'Building vehicle…');
 
   // ── Garage / progression ──────────────────────────────────────────────────
-  const garage       = new VehicleGarage();
-  const levelManager = new LevelManager();
+  const garageManager = new GarageManager();
+  const levelManager  = new LevelManager();
 
   // ── Vehicle ───────────────────────────────────────────────────────────────
-  const tierConfig = garage.currentConfig;
+  const tierConfig = VEHICLE_TIERS[garageManager.selectedCar] ?? VEHICLE_TIERS.bruiser;
   const vehicle    = new Vehicle(physics, {
     mass:             tierConfig.mass,
     engineForce:      tierConfig.engineForce,
@@ -133,7 +186,25 @@ async function main() {
     gridD: tierConfig.voxelGrid.d,
   });
 
-  // ── Collision: voxel shedding + effects ────────────────────────────────────
+  // Apply all saved upgrades (engine power, armor density, explosive force)
+  garageManager.applyAllUpgrades({ vehicle, voxelVehicle: voxelCar });
+
+  setLoadingProgress(70, 'Loading effects…');
+
+  // ── Post-processing ───────────────────────────────────────────────────────
+  const postFX = new PostFX(renderer, scene, camera);
+
+  // ── FX Manager ────────────────────────────────────────────────────────────
+  const fxManager = new FXManager(scene, postFX);
+
+  // Wire shed-voxel → FXManager trail + secondary spark burst
+  voxelCar.onVoxelDetached = (getPos) => {
+    const p    = getPos();
+    const wPos = p ? new THREE.Vector3(p.x, p.y, p.z) : new THREE.Vector3();
+    fxManager.onVoxelDetached(wPos, _currentImpulse, getPos);
+  };
+
+  // ── Collision: voxel shedding + FX + audio ────────────────────────────────
   physics.onCollision(vehicle.body.handle, (otherHandle, started, impulse) => {
     if (!started || impulse < 5) return;
 
@@ -145,35 +216,35 @@ async function main() {
       new THREE.Vector3(0, 0, 2).applyQuaternion(vehicleQuat)
     );
 
+    // Expose impulse to onVoxelDetached closure before calling processImpact
+    _currentImpulse = impulse;
     const detached = voxelCar.processImpact(hitPos, vehiclePos, vehicleQuat, impulse);
 
     if (detached > 0) {
-      // 20% scrap chance per voxel
+      // 20 % scrap chance per shed voxel
       let scrapGained = 0;
       for (let i = 0; i < detached; i++) {
         if (Math.random() < 0.20) scrapGained++;
       }
-      if (scrapGained > 0) garage.addScrap(scrapGained);
+      if (scrapGained > 0) garageManager.addScrap(scrapGained);
 
       levelManager.recordDestruction(detached);
+    }
 
-      // Trigger visual / audio effects
-      postFX.triggerImpactFlash(impulse);
-      audioManager.playImpactSound(impulse, 'metal', vehiclePos);
+    // FX: sparks + flash + chromatic aberration
+    const linVel = vehicle.body.linvel();
+    fxManager.onImpact(hitPos, impulse, linVel);
 
-      if (impulse > 50) {
-        audioManager.playLaserSpark(hitPos);
-        _hitStopFrames  = 3;
-        _shakeIntensity = Math.min(impulse / 40, 2.5);
-        _shakeDecay     = 0;
-      }
+    // Audio
+    audioManager.playImpactSound(impulse, 'metal', vehiclePos);
+
+    if (impulse > 50) {
+      audioManager.playLaserSpark(hitPos);
+      _hitStopFrames  = 3;
+      _shakeIntensity = Math.min(impulse / 40, 2.5);
+      _shakeDecay     = 0;
     }
   });
-
-  setLoadingProgress(70, 'Loading effects…');
-
-  // ── Post-processing ───────────────────────────────────────────────────────
-  const postFX = new PostFX(renderer, scene, camera);
 
   // ── Level loader ──────────────────────────────────────────────────────────
   const levelLoader = new LevelLoader(physics, scene);
@@ -185,23 +256,98 @@ async function main() {
     levelLoader.load(levelManager.levelNumber - 1, levelManager.environment, scene);
   });
 
+  // ── CrazyGames SDK ────────────────────────────────────────────────────────
+  const sdk = new CrazyGamesSDK();
+
   // ── Audio (initialised on first user interaction) ─────────────────────────
   const audioManager = new AudioManager();
   const initAudio = async () => {
     await audioManager.init();
-    window.removeEventListener('keydown', initAudio);
-    window.removeEventListener('click',   initAudio);
   };
   window.addEventListener('keydown', initAudio, { once: true });
   window.addEventListener('click',   initAudio, { once: true });
+  window.addEventListener('touchstart', initAudio, { once: true });
+
+  // ── Garage UI ─────────────────────────────────────────────────────────────
+  const garageUI = new GarageUI(garageManager, {
+    onOpen: () => {
+      _paused = true;
+      sdk.gameplayStop();
+    },
+    onClose: () => {
+      _paused = false;
+      if (_gameplayStarted) sdk.gameplayStart();
+    },
+    onScrapDoubler: (done) => {
+      sdk.showRewardedVideo(
+        // onReward: credit +500 scrap and refresh the UI
+        () => { garageManager.addScrap(500); done(); },
+        // onAudioMute
+        () => { if (audioManager.masterGain) audioManager.masterGain.gain.value = 0; },
+        // onAudioResume
+        () => { if (audioManager.masterGain) audioManager.masterGain.gain.value = 0.8; },
+      );
+    },
+    onCloudSave: () => garageManager.cloudSave(),
+    live: { vehicle, voxelVehicle: voxelCar },
+  });
+
+  // Garage open button
+  document.getElementById('garage-open-btn')
+    ?.addEventListener('click', () => garageUI.open());
+
+  // Incognito warning
+  if (isSaveIncognito()) {
+    const el = document.getElementById('incognito-warning');
+    if (el) el.classList.add('visible');
+  }
 
   setLoadingProgress(100, 'Ready!');
   setTimeout(() => { if (loadingEl) loadingEl.style.display = 'none'; }, 400);
 
   // ── Input handling ─────────────────────────────────────────────────────────
   const keys = {};
-  window.addEventListener('keydown', e => { keys[e.code] = true;  audioManager.resume(); });
-  window.addEventListener('keyup',   e => { keys[e.code] = false; });
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    audioManager.resume();
+
+    if (e.code === 'KeyG' || e.code === 'Tab') {
+      e.preventDefault();
+      garageUI.isOpen ? garageUI.close() : garageUI.open();
+    } else if (e.code === 'Escape') {
+      if (garageUI.isOpen) {
+        garageUI.close();
+      } else {
+        _paused = !_paused;
+        _updatePauseOverlay();
+        if (_paused) sdk.gameplayStop();
+        else if (_gameplayStarted) sdk.gameplayStart();
+      }
+    } else if (e.code === 'KeyP') {
+      if (!garageUI.isOpen) {
+        _paused = !_paused;
+        _updatePauseOverlay();
+        if (_paused) sdk.gameplayStop();
+        else if (_gameplayStarted) sdk.gameplayStart();
+      }
+    }
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // ── Mobile controls ────────────────────────────────────────────────────────
+  _setupMobileControls(keys);
+
+  // Pause overlay buttons
+  document.getElementById('pause-resume-btn')?.addEventListener('click', () => {
+    _paused = false;
+    _updatePauseOverlay();
+    if (_gameplayStarted) sdk.gameplayStart();
+  });
+  document.getElementById('pause-garage-btn')?.addEventListener('click', () => {
+    _paused = false;
+    _updatePauseOverlay();
+    garageUI.open();
+  });
 
   // ── Camera tracking offset (scratch) ──────────────────────────────────────
   const camOffset = new THREE.Vector3(0, 7, -16);
@@ -215,13 +361,19 @@ async function main() {
     requestAnimationFrame(loop);
 
     const frameStart = performance.now();
-    const dt = Math.min((frameStart - lastTime) / 1000, 0.05); // cap at 50ms
+    const dt = Math.min((frameStart - lastTime) / 1000, 0.05); // cap at 50 ms
     lastTime = frameStart;
 
     // ── Hit-stop: pause physics/logic for N frames ─────────────────────
     if (_hitStopFrames > 0) {
       _hitStopFrames--;
       postFX.update(dt);
+      postFX.render();
+      return;
+    }
+
+    // ── Game pause ────────────────────────────────────────────────────
+    if (_paused) {
       postFX.render();
       return;
     }
@@ -238,6 +390,16 @@ async function main() {
       leftHeld && !rightHeld ?  1 :
       rightHeld && !leftHeld ? -1 : 0;
 
+    // ── Signal SDK gameplay start on first drive input ────────────────
+    if (!_gameplayStarted &&
+        (vehicle.controls.throttle > 0 || vehicle.controls.steer !== 0)) {
+      _gameplayStarted = true;
+      sdk.gameplayStart();
+    }
+
+    // ── Vehicle physics update (apply suspension + drive forces) ──────
+    vehicle.update(dt);
+
     // ── Physics step ──────────────────────────────────────────────────
     physics.update(dt);
 
@@ -249,6 +411,9 @@ async function main() {
 
     // ── Level loader tick ─────────────────────────────────────────────
     levelLoader.update(dt);
+
+    // ── FX update (sparks, voxel trails, ghost trail) ─────────────────
+    fxManager.update(dt, vPos, vQuat, vehicle.getSpeed());
 
     // ── Camera follow ────────────────────────────────────────────────
     const targetCamPos = _camPos.copy(camOffset)
@@ -275,9 +440,11 @@ async function main() {
 
     // ── HUD update (throttled to every ~6 frames) ─────────────────────
     if (Math.random() < 0.16) {
-      if (hudLevel)  hudLevel.textContent  = levelManager.levelNumber;
-      if (hudScrap)  hudScrap.textContent  = garage.scrap;
-      if (hudVoxels) hudVoxels.textContent = voxelCar.getLiveVoxelCount();
+      if (hudLevel)    hudLevel.textContent    = levelManager.levelNumber;
+      if (hudScrap)    hudScrap.textContent    = garageManager.scrap;
+      if (hudVoxels)   hudVoxels.textContent   = voxelCar.getLiveVoxelCount();
+      if (hudDest)     hudDest.textContent     = Math.floor(levelManager.objectiveProgress * 100) + '%';
+      if (hudProgress) hudProgress.style.width = (levelManager.objectiveProgress * 100).toFixed(1) + '%';
     }
 
     // ── Post-FX and render ────────────────────────────────────────────
