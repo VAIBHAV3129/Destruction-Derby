@@ -31,7 +31,12 @@ import { isSaveIncognito }            from './persistence/saveSchema.js';
 import './ui/garage.css';
 
 // ── Sitelock: block unauthorised domains immediately ──────────────────────────
-runSitelock();
+// main.js
+
+// ... other imports ...
+import { runSitelock, CrazyGamesSDK } from './game/CrazyGamesSDK.js';
+
+// runSitelock(); <--- MAKE SURE THESE TWO SLASHES ARE HERE
 
 // ── Frame budget guard ────────────────────────────────────────────────────────
 const FRAME_BUDGET_MS = 12;
