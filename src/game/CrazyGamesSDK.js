@@ -1,6 +1,10 @@
 /**
  * CrazyGamesSDK.js
- * Safe wrapper around CrazyGames SDK v2.
+ * Safe wrapper around CrazyGames SDK v3.
+ *
+ * Key v3 changes vs v2:
+ *  - SDK must be initialised with `await SDK.init()` before any other call.
+ *  - Both midgame and rewarded ads use `SDK.ad.requestAd(type, callbacks)`.
  *
  * All calls gracefully no-op when the SDK is absent (local dev).
  * Exports `runSitelock()` — call it as the very first executable
@@ -55,8 +59,34 @@ function _sdkReady() {
 export class CrazyGamesSDK {
   constructor() {
     /** Whether the SDK currently considers gameplay active */
-    this._active = false;
+    this._active      = false;
+    /** Whether SDK.init() has completed */
+    this._initialized = false;
   }
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
+
+  /**
+   * Initialise the CrazyGames SDK v3.
+   * MUST be awaited before any other SDK call (gameplay events, ads, etc.).
+   * Safe to call in dev where the script is absent — resolves immediately.
+   */
+  async init() {
+    if (this._initialized) return;
+    try {
+      if (_sdkReady()) {
+        await window.CrazyGames.SDK.init();
+        console.info('[SDK] Initialized (v3)');
+      } else {
+        console.info('[SDK] SDK script not loaded — running in dev mode');
+      }
+    } catch (e) {
+      console.warn('[SDK] init() error (non-fatal):', e);
+    }
+    this._initialized = true;
+  }
+
+  // ── Gameplay events ─────────────────────────────────────────────────────────
 
   /**
    * Signal active gameplay.
@@ -75,7 +105,7 @@ export class CrazyGamesSDK {
   }
 
   /**
-   * Signal gameplay has paused (shop opened, pause menu, etc.).
+   * Signal gameplay has paused (shop opened, pause menu, ad playing, etc.).
    * Always paired with a subsequent gameplayStart() when play resumes.
    */
   gameplayStop() {
@@ -92,18 +122,57 @@ export class CrazyGamesSDK {
   /** @returns {boolean} true while gameplay is active */
   get isPlaying() { return this._active; }
 
+  // ── Ads ─────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show a midgame ad (interstitial).
+   * Per CrazyGames policy:
+   *  - `gameplayStop()` must be called before the ad.
+   *  - Game audio MUST be muted while the ad plays.
+   *  - `gameplayStart()` is called automatically when the ad finishes/errors.
+   *
+   * @param {()=>void} [onAudioMute]   - called to mute game audio before ad
+   * @param {()=>void} [onAudioResume] - called to restore audio after ad
+   */
+  showMidgameAd(onAudioMute, onAudioResume) {
+    if (!_sdkReady()) {
+      // Dev simulation — briefly mute/resume with no real ad
+      console.info('[SDK] showMidgameAd — simulated in dev (skipped)');
+      onAudioMute?.();
+      setTimeout(() => { onAudioResume?.(); }, 600);
+      return;
+    }
+
+    // Per spec: stop gameplay and mute audio before the ad starts
+    onAudioMute?.();
+    this.gameplayStop();
+
+    window.CrazyGames.SDK.ad.requestAd('midgame', {
+      adStarted:  ()    => onAudioMute?.(),
+      adFinished: ()    => { onAudioResume?.(); this.gameplayStart(); },
+      adError:    (err) => {
+        console.warn('[SDK] midgame ad error:', err);
+        onAudioResume?.();
+        this.gameplayStart();
+      },
+    });
+  }
+
   /**
    * Show a rewarded video ad.
-   * Per CrazyGames policy the game audio MUST be muted before the ad.
+   * Per CrazyGames policy:
+   *  - Game audio MUST be muted before the ad.
+   *  - `onReward` is only called if the user watches the full ad.
+   *  - `gameplayStart()` is called automatically when the ad finishes/errors.
    *
    * @param {()=>void}  onReward       - called if the user completes the ad
    * @param {()=>void}  [onAudioMute]  - called to mute game audio
    * @param {()=>void}  [onAudioResume]- called after ad to restore audio
    */
-  showRewardedVideo(onReward, onAudioMute, onAudioResume) {
+  showRewardedAd(onReward, onAudioMute, onAudioResume) {
     if (!_sdkReady()) {
       // Dev simulation — reward instantly after a short delay
-      console.info('[SDK] showRewardedVideo — simulated in dev (instant reward)');
+      console.info('[SDK] showRewardedAd — simulated in dev (instant reward)');
       onAudioMute?.();
       setTimeout(() => { onAudioResume?.(); onReward?.(); }, 800);
       return;
@@ -113,16 +182,28 @@ export class CrazyGamesSDK {
     onAudioMute?.();
     this.gameplayStop();
 
-    window.CrazyGames.SDK.ad.showRewardedVideo({
+    window.CrazyGames.SDK.ad.requestAd('rewarded', {
       adStarted:  ()    => onAudioMute?.(),
       adFinished: ()    => { onAudioResume?.(); onReward?.(); this.gameplayStart(); },
       adError:    (err) => {
-        console.warn('[SDK] ad error:', err);
+        console.warn('[SDK] rewarded ad error:', err);
         onAudioResume?.();
         this.gameplayStart();
       },
     });
   }
+
+  /**
+   * @deprecated Use showRewardedAd() — kept for backwards compatibility.
+   * @param {()=>void}  onReward
+   * @param {()=>void}  [onAudioMute]
+   * @param {()=>void}  [onAudioResume]
+   */
+  showRewardedVideo(onReward, onAudioMute, onAudioResume) {
+    return this.showRewardedAd(onReward, onAudioMute, onAudioResume);
+  }
+
+  // ── Adblock detection ───────────────────────────────────────────────────────
 
   /**
    * Non-blocking adblock detection.

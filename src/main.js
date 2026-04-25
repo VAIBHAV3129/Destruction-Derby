@@ -102,6 +102,13 @@ function _setupMobileControls(keys) {
 
 // ── Main bootstrap ────────────────────────────────────────────────────────────
 async function main() {
+  // ── SDK init: must happen before any other SDK call ───────────────────────
+  // The v3 script loaded synchronously in <head> ensures window.CrazyGames.SDK
+  // exists by the time this deferred module runs. We still await init() so the
+  // SDK can finish its own async setup before we signal gameplay events or ads.
+  const sdk = new CrazyGamesSDK();
+  await sdk.init();
+
   setLoadingProgress(5, 'Initializing renderer…');
 
   // ── Renderer ─────────────────────────────────────────────────────────────
@@ -252,12 +259,17 @@ async function main() {
 
   levelManager.onLevelComplete(() => {
     console.info('[LevelManager] Level complete! Advancing…');
-    levelManager.nextLevel();
-    levelLoader.load(levelManager.levelNumber - 1, levelManager.environment, scene);
+    // Show a midgame ad between levels per CrazyGames guidelines.
+    // Audio is muted for the ad duration, gameplay resumes after.
+    sdk.showMidgameAd(
+      () => { if (audioManager.masterGain) audioManager.masterGain.gain.value = 0; },
+      () => {
+        if (audioManager.masterGain) audioManager.masterGain.gain.value = 0.8;
+        levelManager.nextLevel();
+        levelLoader.load(levelManager.levelNumber - 1, levelManager.environment, scene);
+      },
+    );
   });
-
-  // ── CrazyGames SDK ────────────────────────────────────────────────────────
-  const sdk = new CrazyGamesSDK();
 
   // ── Audio (initialised on first user interaction) ─────────────────────────
   const audioManager = new AudioManager();
@@ -279,7 +291,7 @@ async function main() {
       if (_gameplayStarted) sdk.gameplayStart();
     },
     onScrapDoubler: (done) => {
-      sdk.showRewardedVideo(
+      sdk.showRewardedAd(
         // onReward: credit +500 scrap and refresh the UI
         () => { garageManager.addScrap(500); done(); },
         // onAudioMute

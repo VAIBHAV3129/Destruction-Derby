@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Neon Debris: Voxel Derby</title>
+    <!--
+      CrazyGames SDK v3 — loaded synchronously so it is fully parsed before
+      any ES-module script runs. The SDK exposes window.CrazyGames.SDK and
+      must be initialised with SDK.init() before any other SDK calls.
+      See: https://docs.crazygames.com/sdk/html5/
+    -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
