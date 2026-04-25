@@ -102,8 +102,7 @@ export class Vehicle {
 
     // Lower centre of mass for stability
     this.body.setAdditionalMass(this.mass);
-    this.body.setCenterOfMass({ x: 0, y: -0.3, z: 0 }, true);
-
+    this.body.setAdditionalCenterOfMass({ x: 0, y: -0.5, z: 0 }, true);
     // Set inertia tensor for realistic yaw
     this.body.setAdditionalMassProperties(
       this.mass,
