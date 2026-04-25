@@ -34,9 +34,7 @@ import './ui/garage.css';
 // main.js
 
 // ... other imports ...
-import { runSitelock, CrazyGamesSDK } from './game/CrazyGamesSDK.js';
-
-// runSitelock(); <--- MAKE SURE THESE TWO SLASHES ARE HERE
+ runSitelock();
 
 // ── Frame budget guard ────────────────────────────────────────────────────────
 const FRAME_BUDGET_MS = 12;
