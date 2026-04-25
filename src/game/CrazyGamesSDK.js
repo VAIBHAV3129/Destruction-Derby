@@ -14,7 +14,14 @@
 // ── Sitelock ──────────────────────────────────────────────────────────────────
 
 /** Domains authorised to run this game. */
-const ALLOWED_HOSTS = ['crazygames.com', 'localhost', '127.0.0.1'];
+// CrazyGamesSDK.js - Around line 17
+const ALLOWED_HOSTS = [
+  'crazygames.com', 
+  'localhost', 
+  '127.0.0.1', 
+  'webcontainer.io', // StackBlitz's engine domain
+  'stackblitz.io'    // StackBlitz's UI domain
+];
 
 /**
  * Block execution on unauthorised domains.
